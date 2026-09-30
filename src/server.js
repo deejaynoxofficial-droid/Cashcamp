@@ -164,5 +164,11 @@ app.post('/api/admin/users/:id/status',auth,admin,async(req,res)=>{const allowed
 app.get('/api/admin/audit',auth,admin,async(req,res)=>res.json((await pool.query('SELECT id,actor_user_id,action,target_type,target_id,ip,metadata,created_at FROM audit_logs ORDER BY id DESC LIMIT 300')).rows));
 app.get('/api/admin/fraud',auth,admin,async(req,res)=>res.json((await pool.query('SELECT id,user_id,event_type,severity,ip,details,created_at FROM fraud_events ORDER BY id DESC LIMIT 300')).rows));
 
-app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'../public/index.html')));
-(async()=>{try{await pool.query('SELECT 1');await pool.query(fs.readFileSync(path.join(__dirname,'../sql/schema.sql'),'utf8'));const email=process.env.ADMIN_EMAIL,password=process.env.ADMIN_PASSWORD;if(email&&password){const h=await bcrypt.hash(password,12);await pool.query(`INSERT INTO users(name,email,phone,password_hash,referral_code,role,status,email_verified_at) VALUES('Cash Camp Admin',$1,'ADMIN',$2,'ADMIN','admin','active',NOW()) ON CONFLICT(email) DO NOTHING`,[email,h])}app.listen(PORT,'0.0.0.0',()=>console.log(`Cash Camp v2 listening on ${PORT}`))}catch(e){console.error('Startup failed',e);process.exit(1)}})();
+// Frontend fallback
+// IMPORTANT: Keep this AFTER all /api routes.
+app.use((req,res)=>{
+  res.sendFile(path.join(__dirname,'../public/index.html'));
+});
+
+(async()=>{
+  try{

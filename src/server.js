@@ -213,6 +213,10 @@ if(email&&password){
   );
 }
 
+    if (String(process.env.EMAIL_MODE || 'smtp').toLowerCase() !== 'console') {
+  await verifyMailConfig();
+    }
+    
 app.listen(
   PORT,
   '0.0.0.0',

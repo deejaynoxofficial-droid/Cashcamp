@@ -110,18 +110,155 @@ app.get('/api/config',async(req,res)=>{const s=await settings();res.json({activa
 
 app.post('/api/auth/register',limits.register,async(req,res)=>{
   try{
-    let{name,email,phone,password,referralCode}=req.body;name=(name||'').trim();email=(email||'').trim().toLowerCase();phone=(phone||'').trim();
-    if(!name||!/^\S+@\S+\.\S+$/.test(email)||!phone||!password||password.length<10)return res.status(400).json({error:'Valid name, email, phone and a 10+ character password are required'});
-    const exists=await pool.query('SELECT id FROM users WHERE lower(email)=lower($1) OR phone=$2',[email,phone]);if(exists.rowCount)return res.status(409).json({error:'Email or phone already registered'});
-    let ref=null;if(referralCode){const rr=await pool.query('SELECT id FROM users WHERE referral_code=$1 AND status<>\'suspended\'',[referralCode.trim().toUpperCase()]);if(!rr.rowCount)return res.status(400).json({error:'Invalid referral code'});ref=rr.rows[0].id}
-    const code=('CC'+crypto.randomBytes(5).toString('hex')).slice(0,10).toUpperCase();const hash=await bcrypt.hash(password,12);
-    const r=await pool.query('INSERT INTO users(name,email,phone,password_hash,referral_code,referred_by,signup_ip,signup_user_agent_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,name,email,phone,referral_code,status',[name,email,phone,hash,code,ref,ip(req),uaHash(req)]);
-    if(ref)await pool.query('INSERT INTO referrals(referrer_id,referred_user_id,bonus) VALUES($1,$2,$3)',[ref,r.rows[0].id,Number(process.env.REFERRAL_BONUS||1000)]);
-    const raw=await issueAuthToken(r.rows[0].id,'email_verify',24*60*60*1000);const verifyUrl=`${process.env.APP_URL||`http://localhost:${PORT}`}/?verify=${raw}`;
-    await sendMail({to:email,subject:'Verify your Cash Camp email',text:`Verify your Cash Camp email: ${verifyUrl}\nThis link expires in 24 hours.`});
-    await audit(r.rows[0].id,'auth.register','user',r.rows[0].id,req,{referred:!!ref});
-    res.status(201).json({message:'Account created. Check your email to verify your address, then activate your account.'});
-  }catch(e){console.error(e);res.status(500).json({error:'Registration failed'})}
+    let{name,email,phone,password,referralCode}=req.body;
+
+    name=(name||'').trim();
+    email=(email||'').trim().toLowerCase();
+    phone=(phone||'').trim();
+
+    if(
+      !name ||
+      !/^\S+@\S+\.\S+$/.test(email) ||
+      !phone ||
+      !password ||
+      password.length<10
+    ){
+      return res.status(400).json({
+        error:'Valid name, email, phone and a 10+ character password are required'
+      });
+    }
+
+    const exists=await pool.query(
+      'SELECT id FROM users WHERE lower(email)=lower($1) OR phone=$2',
+      [email,phone]
+    );
+
+    if(exists.rowCount){
+      return res.status(409).json({
+        error:'Email or phone already registered'
+      });
+    }
+
+    let ref=null;
+
+    if(referralCode){
+      const rr=await pool.query(
+        "SELECT id FROM users WHERE referral_code=$1 AND status<>'suspended'",
+        [referralCode.trim().toUpperCase()]
+      );
+
+      if(!rr.rowCount){
+        return res.status(400).json({
+          error:'Invalid referral code'
+        });
+      }
+
+      ref=rr.rows[0].id;
+    }
+
+    const code=(
+      'CC'+crypto.randomBytes(5).toString('hex')
+    ).slice(0,10).toUpperCase();
+
+    const hash=await bcrypt.hash(password,12);
+
+    const r=await pool.query(
+      `INSERT INTO users(
+        name,
+        email,
+        phone,
+        password_hash,
+        referral_code,
+        referred_by,
+        signup_ip,
+        signup_user_agent_hash
+      )
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+      RETURNING id,name,email,phone,referral_code,status`,
+      [
+        name,
+        email,
+        phone,
+        hash,
+        code,
+        ref,
+        ip(req),
+        uaHash(req)
+      ]
+    );
+
+    const user=r.rows[0];
+
+    if(ref){
+      await pool.query(
+        'INSERT INTO referrals(referrer_id,referred_user_id,bonus) VALUES($1,$2,$3)',
+        [
+          ref,
+          user.id,
+          Number(process.env.REFERRAL_BONUS||1000)
+        ]
+      );
+    }
+
+    const raw=await issueAuthToken(
+      user.id,
+      'email_verify',
+      24*60*60*1000
+    );
+
+    const verifyUrl=
+      `${process.env.APP_URL||`http://localhost:${PORT}`}/?verify=${raw}`;
+
+    let emailSent=false;
+
+    try{
+      await sendMail({
+        to:email,
+        subject:'Verify your Cash Camp email',
+        text:
+          `Verify your Cash Camp email: ${verifyUrl}\n`+
+          `This link expires in 24 hours.`
+      });
+
+      emailSent=true;
+
+    }catch(mailError){
+      console.error(
+        '[REGISTER] Verification email failed:',
+        mailError.message
+      );
+    }
+
+    await audit(
+      user.id,
+      'auth.register',
+      'user',
+      user.id,
+      req,
+      {
+        referred:!!ref,
+        verificationEmailSent:emailSent
+      }
+    );
+
+    if(emailSent){
+      return res.status(201).json({
+        message:
+          'Account created. Check your email to verify your address, then activate your account.'
+      });
+    }
+
+    return res.status(201).json({
+      message:
+        'Account created, but the verification email could not be sent. Please try the verification email again after email service is restored.'
+    });
+
+  }catch(e){
+    console.error('[REGISTER] Registration failed:',e);
+    res.status(500).json({
+      error:'Registration failed'
+    });
+  }
 });
 
 app.post('/api/auth/verify-email',limits.verify,async(req,res)=>{try{const raw=String(req.body.token||'');if(raw.length<32)return res.status(400).json({error:'Invalid verification token'});const r=await pool.query("SELECT * FROM auth_tokens WHERE token_hash=$1 AND token_type='email_verify' AND used_at IS NULL AND expires_at>NOW() ORDER BY id DESC LIMIT 1",[sha(raw)]);if(!r.rowCount)return res.status(400).json({error:'Invalid or expired verification link'});await pool.query('BEGIN');await pool.query('UPDATE auth_tokens SET used_at=NOW() WHERE id=$1',[r.rows[0].id]);await pool.query('UPDATE users SET email_verified_at=NOW() WHERE id=$1',[r.rows[0].user_id]);await pool.query('COMMIT');await audit(r.rows[0].user_id,'auth.email_verified','user',r.rows[0].user_id,req);res.json({message:'Email verified. You can now log in.'})}catch(e){try{await pool.query('ROLLBACK')}catch{}res.status(500).json({error:'Verification failed'})}});

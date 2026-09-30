@@ -10,7 +10,7 @@ const helmet=require('helmet');
 const multer=require('multer');
 const {pool}=require('./db');
 const {getPaymentProvider,hmac}=require('./payments');
-const {sendMail}=require('./mailer');
+const {sendMail,verifyMailConfig}=require('./mailer');
 const limits=require('./rate-limit');
 
 const app=express();

@@ -172,3 +172,55 @@ app.use((req,res)=>{
 
 (async()=>{
   try{
+    await pool.query('SELECT 1');
+
+await pool.query(
+  fs.readFileSync(
+    path.join(__dirname,'../sql/schema.sql'),
+    'utf8'
+  )
+);
+
+const email=process.env.ADMIN_EMAIL;
+const password=process.env.ADMIN_PASSWORD;
+
+if(email&&password){
+  const h=await bcrypt.hash(password,12);
+
+  await pool.query(
+    `INSERT INTO users(
+      name,
+      email,
+      phone,
+      password_hash,
+      referral_code,
+      role,
+      status,
+      email_verified_at
+    )
+    VALUES(
+      'Cash Camp Admin',
+      $1,
+      'ADMIN',
+      $2,
+      'ADMIN',
+      'admin',
+      'active',
+      NOW()
+    )
+    ON CONFLICT(email) DO NOTHING`,
+    [email,h]
+  );
+}
+
+app.listen(
+  PORT,
+  '0.0.0.0',
+  ()=>console.log(`Cash Camp v2 listening on ${PORT}`)
+);
+
+}catch(e){
+  console.error('Startup failed',e);
+  process.exit(1);
+}
+})();

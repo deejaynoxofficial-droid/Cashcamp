@@ -1,0 +1,26 @@
+{
+  "name": "cash-camp",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Cash Camp v2 - task rewards, wallet ledger, verified payments and account security",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:init": "node src/init-db.js",
+    "db:migrate": "node src/migrate.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.6",
+    "pg": "^8.16.3"
+  }
+}

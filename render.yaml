@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: cash-camp
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cash-camp-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: EMAIL_MODE
+        value: smtp
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: PAYMENT_NUMBER
+        value: +256745720308
+      - key: PAYMENT_NAME
+        value: FATUMAH SULEIMAN
+      - key: ACTIVATION_FEE
+        value: "11000"
+      - key: REFERRAL_BONUS
+        value: "1000"
+      - key: MIN_WITHDRAWAL
+        value: "5000"
+      - key: PAYMENT_PROVIDER
+        value: manual
+      - key: PAYMENT_API_URL
+        sync: false
+      - key: PAYMENT_API_KEY
+        sync: false
+      - key: PAYMENT_WEBHOOK_SECRET
+        sync: false
+      - key: PAYMENT_CALLBACK_URL
+        sync: false
+databases:
+  - name: cash-camp-db
+    databaseName: cashcamp
+    user: cashcamp
